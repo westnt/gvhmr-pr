@@ -41,12 +41,12 @@ class Extractor:
 
         # Inference
         F, _, H, W = imgs.shape  # (F, 3, H, W)
-        imgs = imgs.to(self.device)
         batch_size = self.batch_size
         use_amp = self.device.type == "cuda" and not _fp32_forced()  # bf16 autocast on CUDA (~2x)
         features = []
         for j in track(range(0, F, batch_size), desc="HMR2 Feature", leave=self.tqdm_leave):
-            imgs_batch = imgs[j : j + batch_size]
+            # Per-batch transfer: the whole clip's crops (~0.8MB/frame fp32) on-device OOMs long clips on small GPUs.
+            imgs_batch = imgs[j : j + batch_size].to(self.device)
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=use_amp):
                 feature = self.extractor({"img": imgs_batch})
             features.append(feature.float().detach().cpu())  # fp32 for a dtype-stable .pt cache
