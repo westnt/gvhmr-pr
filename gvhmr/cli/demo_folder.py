@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gvhmr.utils.console import rule
+from rich.markup import escape
+
+from gvhmr.utils.console import console, rule
 from gvhmr.utils.pylogger import Log
 
 
@@ -26,17 +28,29 @@ def run(
     folder = Path(folder)
     videos = sorted([*folder.glob("*.mp4"), *folder.glob("*.MP4")])
     Log.info(f"Found [gvhmr]{len(videos)}[/] videos in [muted]{folder}[/]")
+    failed: list[tuple[Path, Exception]] = []
     for k, video in enumerate(videos, 1):
-        rule(f"[{k}/{len(videos)}] {video.name}")
-        run_demo(
-            video,
-            output_root=output_root,
-            static_cam=static_cam,
-            camera=camera,
-            use_dpvo=use_dpvo,
-            f_mm=f_mm,
-            f_px=f_px,
-            render_scale=render_scale,
-            no_render=no_render,
-            smplx=smplx,
-        )
+        rule(f"[{k}/{len(videos)}] {escape(video.name)}")
+        try:
+            run_demo(
+                video,
+                output_root=output_root,
+                static_cam=static_cam,
+                camera=camera,
+                use_dpvo=use_dpvo,
+                f_mm=f_mm,
+                f_px=f_px,
+                render_scale=render_scale,
+                no_render=no_render,
+                smplx=smplx,
+            )
+        except Exception as e:
+            console.print_exception()
+            Log.warning(f"[warn]failed[/] {escape(video.name)}: {escape(str(e))} — continuing")
+            failed.append((video, e))
+
+    if failed:
+        rule(f"{len(failed)}/{len(videos)} failed")
+        for video, e in failed:
+            Log.warning(f"{escape(video.name)}: {escape(f'{type(e).__name__}: {e}')}")
+        raise SystemExit(1)

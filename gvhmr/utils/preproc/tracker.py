@@ -98,6 +98,8 @@ class Tracker:
 
         # parse track_history & use top1 track
         id_to_frame_ids, id_to_bbx_xyxys, id_sorted = self.sort_track_length(track_history, video_path)
+        if not id_sorted:
+            raise RuntimeError(f"no person detected in {video_path}")
         track_id = id_sorted[0]
         frame_ids = torch.tensor(id_to_frame_ids[track_id])  # (N,)
         bbx_xyxys = torch.tensor(id_to_bbx_xyxys[track_id])  # (N, 4)
