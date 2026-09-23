@@ -28,7 +28,7 @@ def run(
     folder = Path(folder)
     videos = sorted([*folder.glob("*.mp4"), *folder.glob("*.MP4")])
     Log.info(f"Found [gvhmr]{len(videos)}[/] videos in [muted]{folder}[/]")
-    failed: list[tuple[Path, Exception]] = []
+    failed: list[tuple[Path, str]] = []
     for k, video in enumerate(videos, 1):
         rule(f"[{k}/{len(videos)}] {escape(video.name)}")
         try:
@@ -46,11 +46,27 @@ def run(
             )
         except Exception as e:
             console.print_exception()
-            Log.warning(f"[warn]failed[/] {escape(video.name)}: {escape(str(e))} — continuing")
-            failed.append((video, e))
+            msg = f"{type(e).__name__}: {e}"
+            Log.warning(f"[warn]failed[/] {escape(video.name)}: {escape(msg)} — continuing")
+            failed.append((video, msg))
+        else:
+            continue
+        # Outside the except, so the traceback (whose frames pin the failed run's GPU tensors) is gone —
+        # otherwise the next video OOMs on a small card.
+        _release_gpu_memory()
 
     if failed:
         rule(f"{len(failed)}/{len(videos)} failed")
-        for video, e in failed:
-            Log.warning(f"{escape(video.name)}: {escape(f'{type(e).__name__}: {e}')}")
+        for video, msg in failed:
+            Log.warning(f"{escape(video.name)}: {escape(msg)}")
         raise SystemExit(1)
+
+
+def _release_gpu_memory() -> None:
+    import gc
+
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()

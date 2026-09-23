@@ -158,6 +158,16 @@ def _find_intrinsics_sidecar(video: Path) -> Path | None:
     return None
 
 
+def _cv2_can_decode(video) -> bool:
+    import cv2
+
+    cap = cv2.VideoCapture(str(video))
+    try:
+        return cap.read()[0]
+    finally:
+        cap.release()
+
+
 def _stage_intrinsics(src, dest_dir: Path) -> Path:
     """Normalize a user-supplied intrinsics source into a file :func:`load_intrinsics_file` can read.
 
@@ -417,10 +427,12 @@ def build_demo_cfg(
         Path(cfg.video_path).unlink(missing_ok=True)
         src_fps = get_video_fps(video)
         resample = abs(src_fps - MODEL_FPS) > 1.5
-        if not resample and get_video_rotation(video) == 0:
+        if not resample and get_video_rotation(video) == 0 and _cv2_can_decode(video):
             # Already ~30fps and upright: skip the whole decode+re-encode — link the original in place.
             # (Higher fidelity too: models read the original pixels instead of a recompressed copy. The
-            # rotation guard protects decoders that ignore the phone-orientation flag, e.g. ultralytics'.)
+            # rotation guard protects decoders that ignore the phone-orientation flag, e.g. ultralytics'.
+            # The decode guard: ultralytics reads via OpenCV, whose bundled FFmpeg can't decode AV1 — a
+            # linked AV1 file yields zero frames, i.e. "no person detected".)
             try:
                 Path(cfg.video_path).symlink_to(Path(video).resolve())
             except OSError:  # filesystem without symlinks → plain copy
