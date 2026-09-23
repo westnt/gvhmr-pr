@@ -371,9 +371,16 @@ def build_demo_cfg(
             else:
                 _warn_focal_fallback(video)
 
+    def _quoted_override(key: str, value) -> str:
+        # Hydra's override grammar treats [ ] , = : as syntax (list/dict literals, etc.), which raw
+        # filenames routinely contain (e.g. yt-dlp's "title[VIDEO_ID].mp4"). Quoting the value as a
+        # Hydra-escaped string sidesteps that — bare `f"{key}={value}"` breaks on such names.
+        escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+        return f'{key}="{escaped}"'
+
     with initialize_config_module(version_base="1.3", config_module="gvhmr.configs"):
         overrides = [
-            f"video_name={video.stem}",
+            _quoted_override("video_name", video.stem),
             f"static_cam={static_cam}",
             f"verbose={verbose}",
             f"use_dpvo={use_dpvo}",
@@ -385,7 +392,7 @@ def build_demo_cfg(
         if render_scale is not None:
             overrides.append(f"render_scale={render_scale}")
         if output_root is not None:
-            overrides.append(f"output_root={output_root}")
+            overrides.append(_quoted_override("output_root", output_root))
         # Pluggable-stage selections / --recipe / --set (assembled by run()), applied last.
         overrides += list(config_overrides or [])
         register_store_gvhmr()
@@ -741,7 +748,10 @@ def render_incam(cfg, device, skeleton_overlay: bool = False, joint_indices=None
 
     length, width, height = get_video_lwh(cfg.video_path)
     render_scale = float(cfg.get("render_scale", 1.0))
-    rw, rh = max(1, round(width * render_scale)), max(1, round(height * render_scale))
+    # libx264 (yuv420p) requires even width/height, so round to the nearest even integer — a plain
+    # round() can land on an odd value (e.g. a 1082px source at 0.5x scale -> 541) and crash the encoder.
+    rw = max(2, 2 * round(width * render_scale / 2))
+    rh = max(2, 2 * round(height * render_scale / 2))
     K = pred["K_fullimg"][0].clone()
     K[:2] *= render_scale
 
@@ -825,7 +835,10 @@ def render_global(
 
     length, width, height = get_video_lwh(cfg.video_path)
     render_scale = float(cfg.get("render_scale", 1.0))
-    rw, rh = max(1, round(width * render_scale)), max(1, round(height * render_scale))
+    # libx264 (yuv420p) requires even width/height, so round to the nearest even integer — a plain
+    # round() can land on an odd value (e.g. a 1082px source at 0.5x scale -> 541) and crash the encoder.
+    rw = max(2, 2 * round(width * render_scale / 2))
+    rh = max(2, 2 * round(height * render_scale / 2))
     _, _, K = create_camera_sensor(rw, rh, 24)
     renderer = make_renderer(rw, rh, device=device, faces=faces, K=K)
     scale, cx, cz = get_ground_params_from_points(joints_glob[:, 0], verts_glob)
