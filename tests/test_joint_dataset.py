@@ -14,6 +14,7 @@ import torch
 import torch.nn.functional as F
 
 pytestmark = [pytest.mark.gpu, pytest.mark.checkpoint, pytest.mark.dataset]
+pytest.importorskip("yacs")  # HMR2 config dep, `preproc` extra only; imported before the data-present skips
 
 
 def test_dataset_crops_reproduce_cached_hmr2_features():
