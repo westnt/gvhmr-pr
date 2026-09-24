@@ -245,7 +245,7 @@ def demo_folder(
     A per-video [gvhmr]<name>.intrinsics.json[/] sidecar next to each clip is auto-detected (no flag needed)."""
     from gvhmr.cli.demo_folder import run
 
-    run(
+    failed = run(
         folder,
         output_root=output_root,
         static_cam=static_cam,
@@ -257,6 +257,8 @@ def demo_folder(
         no_render=no_render,
         smplx=smplx,
     )
+    if failed:
+        raise typer.Exit(1)
 
 
 @app.command(name="list")

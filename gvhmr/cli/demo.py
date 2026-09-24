@@ -173,8 +173,6 @@ def _even_render_size(width: int, height: int, scale: float) -> tuple[int, int]:
 
 
 def _cv2_can_decode(video) -> bool:
-    import cv2
-
     cap = cv2.VideoCapture(str(video))
     try:
         return cap.read()[0]

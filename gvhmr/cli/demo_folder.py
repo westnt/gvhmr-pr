@@ -22,7 +22,8 @@ def run(
     render_scale: float | None = None,
     no_render: bool = False,
     smplx: bool = False,
-) -> None:
+) -> list[tuple[Path, str]]:
+    """Returns the ``(video, error)`` pairs that failed; one failure doesn't stop the rest."""
     from gvhmr.cli.demo import run as run_demo
 
     folder = Path(folder)
@@ -59,7 +60,7 @@ def run(
         rule(f"{len(failed)}/{len(videos)} failed")
         for video, msg in failed:
             Log.warning(f"{escape(video.name)}: {escape(msg)}")
-        raise SystemExit(1)
+    return failed
 
 
 def _release_gpu_memory() -> None:
