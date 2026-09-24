@@ -158,6 +158,20 @@ def _find_intrinsics_sidecar(video: Path) -> Path | None:
     return None
 
 
+def _quoted_override(key: str, value) -> str:
+    # Hydra's override grammar treats [ ] , = : as syntax (list/dict literals, etc.), which raw
+    # filenames routinely contain (e.g. yt-dlp's "title[VIDEO_ID].mp4"). Quoting the value as a
+    # Hydra-escaped string sidesteps that — bare `f"{key}={value}"` breaks on such names.
+    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    return f'{key}="{escaped}"'
+
+
+def _even_render_size(width: int, height: int, scale: float) -> tuple[int, int]:
+    # libx264 (yuv420p) requires even width/height, so round to the nearest even integer — a plain
+    # round() can land on an odd value (e.g. a 1082px source at 0.5x scale -> 541) and crash the encoder.
+    return max(2, 2 * round(width * scale / 2)), max(2, 2 * round(height * scale / 2))
+
+
 def _cv2_can_decode(video) -> bool:
     import cv2
 
@@ -380,13 +394,6 @@ def build_demo_cfg(
                 Log.info(f"Focal length [ok]{f_mm}mm[/] (35mm-equiv) read from video metadata")
             else:
                 _warn_focal_fallback(video)
-
-    def _quoted_override(key: str, value) -> str:
-        # Hydra's override grammar treats [ ] , = : as syntax (list/dict literals, etc.), which raw
-        # filenames routinely contain (e.g. yt-dlp's "title[VIDEO_ID].mp4"). Quoting the value as a
-        # Hydra-escaped string sidesteps that — bare `f"{key}={value}"` breaks on such names.
-        escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
-        return f'{key}="{escaped}"'
 
     with initialize_config_module(version_base="1.3", config_module="gvhmr.configs"):
         overrides = [
@@ -760,10 +767,7 @@ def render_incam(cfg, device, skeleton_overlay: bool = False, joint_indices=None
 
     length, width, height = get_video_lwh(cfg.video_path)
     render_scale = float(cfg.get("render_scale", 1.0))
-    # libx264 (yuv420p) requires even width/height, so round to the nearest even integer — a plain
-    # round() can land on an odd value (e.g. a 1082px source at 0.5x scale -> 541) and crash the encoder.
-    rw = max(2, 2 * round(width * render_scale / 2))
-    rh = max(2, 2 * round(height * render_scale / 2))
+    rw, rh = _even_render_size(width, height, render_scale)
     K = pred["K_fullimg"][0].clone()
     K[:2] *= render_scale
 
@@ -847,10 +851,7 @@ def render_global(
 
     length, width, height = get_video_lwh(cfg.video_path)
     render_scale = float(cfg.get("render_scale", 1.0))
-    # libx264 (yuv420p) requires even width/height, so round to the nearest even integer — a plain
-    # round() can land on an odd value (e.g. a 1082px source at 0.5x scale -> 541) and crash the encoder.
-    rw = max(2, 2 * round(width * render_scale / 2))
-    rh = max(2, 2 * round(height * render_scale / 2))
+    rw, rh = _even_render_size(width, height, render_scale)
     _, _, K = create_camera_sensor(rw, rh, 24)
     renderer = make_renderer(rw, rh, device=device, faces=faces, K=K)
     scale, cx, cz = get_ground_params_from_points(joints_glob[:, 0], verts_glob)
